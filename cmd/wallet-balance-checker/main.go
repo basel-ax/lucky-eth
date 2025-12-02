@@ -67,8 +67,13 @@ func main() {
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
 	// --- Blockchain RPC Setup ---
+	ethRPC := os.Getenv("ETH_RPC_URL")
+	if ethRPC == "" {
+		log.Println("ETH_RPC_URL not set, using public RPC: https://cloudflare-eth.com")
+		ethRPC = "https://cloudflare-eth.com"
+	}
 	blockchains = []Blockchain{
-		{Name: "Ethereum", RpcURL: os.Getenv("ETH_RPC_URL")},
+		{Name: "Ethereum", RpcURL: ethRPC},
 		{Name: "Arbitrum", RpcURL: os.Getenv("ARBITRUM_RPC_URL")},
 		{Name: "Base", RpcURL: os.Getenv("BASE_RPC_URL")},
 		{Name: "BSC", RpcURL: os.Getenv("BSC_RPC_URL")},
@@ -114,7 +119,14 @@ func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, wallet *enti
 		log.Printf("Derived address %s for wallet ID %d", wallet.Address, wallet.ID)
 	}
 
-	// 2. Check balance on each blockchain
+	// 2. Check balance on each blockchain and update timestamp
+	now := time.Now()
+	wallet.BalanceUpdatedAt = &now
+	if err := db.Save(wallet).Error; err != nil {
+		log.Printf("Failed to update balance timestamp for wallet %d: %v", wallet.ID, err)
+		// We can still proceed with balance checking even if the timestamp update fails
+	}
+
 	for _, chain := range blockchains {
 		balance, err := checkBalance(chain.RpcURL, wallet.Address)
 		if err != nil {
@@ -126,25 +138,27 @@ func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, wallet *enti
 		if balance.Cmp(big.NewInt(0)) > 0 {
 			log.Printf("FOUND BALANCE on %s for address %s: %s", chain.Name, wallet.Address, balance.String())
 
-			// Update wallet in DB
-			now := time.Now()
-			wallet.Balance = balance.String()
-			wallet.BalanceUpdatedAt = &now
-			wallet.IsNotified = true
-			if err := db.Save(wallet).Error; err != nil {
-				log.Printf("Failed to update wallet %d after finding balance: %v", wallet.ID, err)
-				// Don't return, still try to send notification
-			}
-
-			// Send Telegram notification
+			// Prepare notification
 			debankURL := fmt.Sprintf("https://debank.com/profile/%s", wallet.Address)
 			messageText := fmt.Sprintf("💰 Found a wallet with a balance!\n\nChain: %s\nAddress: %s\n\nView on DeBank:\n%s", chain.Name, wallet.Address, debankURL)
 			msg := tgbotapi.NewMessage(chatID, messageText)
+
+			// Send Telegram notification
 			_, err := bot.Send(msg)
 			if err != nil {
 				log.Printf("Failed to send Telegram notification for wallet %s: %v", wallet.Address, err)
-			} else {
-				log.Printf("Successfully sent Telegram notification for wallet %s", wallet.Address)
+				// If sending fails, we don't update the DB and will retry on the next run.
+				return
+			}
+
+			log.Printf("Successfully sent Telegram notification for wallet %s", wallet.Address)
+
+			// Update wallet in DB only after successful notification
+			wallet.Balance = balance.String()
+			wallet.IsNotified = true
+			if err := db.Save(wallet).Error; err != nil {
+				log.Printf("Failed to update wallet %d after sending notification: %v", wallet.ID, err)
+				// Even if this fails, we don't want to re-notify. The log will have to suffice.
 			}
 
 			// Once balance is found and notified, we are done with this wallet
