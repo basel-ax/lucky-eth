@@ -2,6 +2,12 @@
 
 `lucky-eth` is a Go-based project for working with Ethereum wallets. It includes tools for generating wallets, checking balances, and receiving notifications.
 
+## LuckySix
+This is a part of the project. All results you can get by 3 projects.    
+ - [LuckySix](https://github.com/basel-ax/luckysix)
+ - [LuckyEth](https://github.com/basel-ax/lucky-eth)
+ - [LuckyCosmos](https://github.com/basel-ax/lucky-cosmos)
+
 ## Features
 
 -   Generate wallets from 12-word mnemonics.
