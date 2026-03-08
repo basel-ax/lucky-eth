@@ -59,4 +59,72 @@ The `WalletBalance` entity is expected to have at least a `mnemonic` column popu
     ./wallet-balance-checker
     ```
 
-The application will run, check all un-notified wallets in the database, send notifications if applicable, and then exit. You can set this up to run on a schedule using a cron job or a similar task scheduler.
+## Command Line Flags
+
+The application supports the following command line flags:
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--prod` | boolean | Run in production mode. When set, console output is suppressed and a summary notification is sent to Telegram after completion. |
+
+### Examples
+
+**Development mode (default):**
+```sh
+./wallet-balance-checker
+```
+This will show all log messages in the console.
+
+**Production mode:**
+```sh
+./wallet-balance-checker --prod
+```
+This will run silently without console output and send a summary message to Telegram when complete.
+
+## Cron Job Setup
+
+To run the wallet balance checker automatically on a schedule, you can set up a cron job.
+
+### Crontab Entry
+
+Edit your crontab file:
+```sh
+crontab -e
+```
+
+Add the following entry to run the checker every 5 minutes:
+```cron
+*/5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod >> /var/log/wallet-balance-checker.log 2>&1
+```
+
+Or to suppress all output:
+```cron
+*/5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod > /dev/null 2>&1
+```
+
+### How It Works
+
+-   **Lock Mechanism**: The application uses a lock file (`/tmp/wallet-balance-checker.lock`) to prevent concurrent execution. If the previous instance is still running, the new instance will exit silently in production mode.
+-   **Production Mode**: When using `--prod` flag:
+    -   No console output is shown
+    -   A Telegram summary message is sent after completion with:
+        -   Number of addresses derived
+        -   Number of balances updated
+        -   Number of notifications sent
+        -   Total rows processed
+
+### Log Rotation
+
+To prevent log files from growing too large, consider setting up log rotation. Add to `/etc/logrotate.d/wallet-balance-checker`:
+
+```
+/var/log/wallet-balance-checker.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
+```
