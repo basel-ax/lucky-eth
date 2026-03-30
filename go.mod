@@ -1,6 +1,6 @@
 module github.com/basel-ax/lucky-eth
 
-go 1.25.3
+go 1.24.4
 
 require (
 	github.com/ethereum/go-ethereum v1.10.26
