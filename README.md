@@ -55,3 +55,34 @@ This command checks the balances of Ethereum wallets stored in the database.
     ```
 
 For more details, see the `README.md` file in the `cmd/wallet-balance-checker` directory.
+
+## Cron Job Setup
+
+The `wallet-balance-checker` command can be scheduled to run automatically using cron.
+
+### Crontab Entry
+
+Edit your crontab file:
+```sh
+crontab -e
+```
+
+Add the following entry to run the checker every 5 minutes in production mode:
+```cron
+*/5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod >> /var/log/wallet-balance-checker.log 2>&1
+```
+
+Or to suppress all output:
+```cron
+*/5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod > /dev/null 2>&1
+```
+
+### How It Works
+
+-   **Lock Mechanism**: The application uses a lock file (`/tmp/wallet-balance-checker.lock`) to prevent concurrent execution. If the previous instance is still running, the new instance will exit silently in production mode.
+-   **Production Mode**: When using `--prod` flag:
+    -   No console output is shown
+    -   A Telegram summary message is sent after completion with:
+        -   Number of addresses derived
+        -   Number of balances updated
+        -   Number of notifications sent
