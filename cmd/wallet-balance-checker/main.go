@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -70,9 +71,11 @@ var logger Logger
 
 // RowCountStats holds statistics about processed records
 type RowCountStats struct {
+	TotalWallets   int
 	AddressDerived int
 	BalanceUpdated int
 	Notifications  int
+	Errors         int
 }
 
 // Lock file path for preventing concurrent execution
@@ -116,7 +119,29 @@ func main() {
 	defer releaseLock(lockFile)
 
 	// Load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
+	// Try multiple locations since cron runs from / or home directory:
+	// 1. Directory of the executable
+	// 2. Current working directory
+	// 3. Fallback to environment variables
+	envLoaded := false
+
+	// Try location of the executable
+	exePath, err := os.Executable()
+	if err == nil {
+		exeDir := filepath.Dir(exePath)
+		if err := godotenv.Load(filepath.Join(exeDir, ".env")); err == nil {
+			envLoaded = true
+		}
+	}
+
+	// If not loaded yet, try current working directory
+	if !envLoaded {
+		if err := godotenv.Load(); err == nil {
+			envLoaded = true
+		}
+	}
+
+	if !envLoaded {
 		logger.Print("No .env file found, using environment variables")
 	}
 
@@ -184,6 +209,7 @@ func main() {
 		logger.Fatalf("Failed to fetch wallets: %v", err)
 	}
 
+	stats.TotalWallets = len(wallets)
 	logger.Printf("Found %d wallets to check.", len(wallets))
 
 	for i := range wallets {
@@ -200,20 +226,12 @@ func main() {
 
 // sendSummaryNotification sends a summary of the processed wallets to Telegram
 func sendSummaryNotification(bot *tgbotapi.BotAPI, chatID int64, stats *RowCountStats) {
-	messageText := fmt.Sprintf("✅ Wallet Balance Checker Completed\\n\n"+
-		"📊 *Summary:*\n"+
-		"• Addresses Derived: %d\n"+
-		"• Balances Updated: %d\n"+
-		"• Notifications Sent: %d\n\n"+
-		"Total Rows Processed: %d",
-		stats.AddressDerived,
-		stats.BalanceUpdated,
-		stats.Notifications,
-		stats.AddressDerived+stats.BalanceUpdated,
+	messageText := fmt.Sprintf("✅ Checker command completed!\n"+
+		"Rows processed/updated: %d",
+		stats.TotalWallets,
 	)
 
 	msg := tgbotapi.NewMessage(chatID, messageText)
-	msg.ParseMode = "MarkdownV2"
 
 	_, err := bot.Send(msg)
 	if err != nil {
@@ -228,11 +246,13 @@ func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, stats *RowCo
 		address, err := deriveAddress(wallet.Mnemonic)
 		if err != nil {
 			logger.Printf("Failed to derive address for mnemonic ID %d: %v", wallet.ID, err)
+			stats.Errors++
 			return
 		}
 		wallet.Address = address
 		if err := db.Save(wallet).Error; err != nil {
 			logger.Printf("Failed to save address for wallet %d: %v", wallet.ID, err)
+			stats.Errors++
 			return // Continue to next wallet if save fails
 		}
 		stats.AddressDerived++
@@ -244,6 +264,7 @@ func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, stats *RowCo
 	wallet.BalanceUpdatedAt = &now
 	if err := db.Save(wallet).Error; err != nil {
 		logger.Printf("Failed to update balance timestamp for wallet %d: %v", wallet.ID, err)
+		stats.Errors++
 		// We can still proceed with balance checking even if the timestamp update fails
 	} else {
 		stats.BalanceUpdated++

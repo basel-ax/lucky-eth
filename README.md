@@ -77,6 +77,18 @@ Or to suppress all output:
 */5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod > /dev/null 2>&1
 ```
 
+### Run Every 35 Minutes
+
+To run the checker every 35 minutes instead:
+```cron
+*/35 * * * * /path/to/lucky-eth/wallet-balance-checker --prod >> /var/log/wallet-balance-checker.log 2>&1
+```
+
+Or to suppress all output:
+```cron
+*/35 * * * * /path/to/lucky-eth/wallet-balance-checker --prod > /dev/null 2>&1
+```
+
 ### How It Works
 
 -   **Lock Mechanism**: The application uses a lock file (`/tmp/wallet-balance-checker.lock`) to prevent concurrent execution. If the previous instance is still running, the new instance will exit silently in production mode.
