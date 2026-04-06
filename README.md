@@ -29,6 +29,7 @@ Then, open `.env` and fill in the required values.
 -   `DATABASE_URL`: The connection string for your PostgreSQL database.
 -   `TELEGRAM_APP_BOT_TOKEN`: The token for your Telegram bot.
 -   `TELEGRAM_CHAT_ID`: The ID of the Telegram chat where notifications will be sent.
+-   `TELEGRAM_TOPIC_ID`: (Optional) The ID of a specific topic in a forum/group. Leave empty to send messages to the general chat.
 -   `ETH_RPC_URL`: The RPC endpoint for the Ethereum mainnet.
 -   `ARBITRUM_RPC_URL`: The RPC endpoint for the Arbitrum network.
 -   `BASE_RPC_URL`: The RPC endpoint for the Base network.

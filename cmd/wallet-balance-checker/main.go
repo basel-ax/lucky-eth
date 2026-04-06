@@ -171,6 +171,16 @@ func main() {
 		logger.Fatalf("Invalid TELEGRAM_CHAT_ID: %v", err)
 	}
 
+	// Optional topic ID for sending messages to specific topics
+	topicIDStr := os.Getenv("TELEGRAM_TOPIC_ID")
+	var topicID int64 = 0
+	if topicIDStr != "" {
+		topicID, err = strconv.ParseInt(topicIDStr, 10, 64)
+		if err != nil {
+			logger.Fatalf("Invalid TELEGRAM_TOPIC_ID: %v", err)
+		}
+	}
+
 	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
 		logger.Fatalf("Failed to create Telegram bot: %v", err)
@@ -213,34 +223,43 @@ func main() {
 	logger.Printf("Found %d wallets to check.", len(wallets))
 
 	for i := range wallets {
-		processWallet(db, bot, chatID, stats, &wallets[i])
+		processWallet(db, bot, chatID, topicID, stats, &wallets[i])
 	}
 
 	logger.Println("Wallet balance check finished.")
 
 	// Send summary notification in prod mode
 	if *prodMode {
-		sendSummaryNotification(bot, chatID, stats)
+		sendSummaryNotification(bot, chatID, topicID, stats)
 	}
 }
 
+// sendTelegramMessage sends a message to a chat, optionally targeting a specific topic
+func sendTelegramMessage(bot *tgbotapi.BotAPI, chatID int64, topicID int64, text string) error {
+	params := map[string]string{
+		"chat_id": strconv.FormatInt(chatID, 10),
+		"text":    text,
+	}
+	if topicID != 0 {
+		params["message_thread_id"] = strconv.FormatInt(topicID, 10)
+	}
+
+	_, err := bot.MakeRequest("sendMessage", params)
+	return err
+}
+
 // sendSummaryNotification sends a summary of the processed wallets to Telegram
-func sendSummaryNotification(bot *tgbotapi.BotAPI, chatID int64, stats *RowCountStats) {
+func sendSummaryNotification(bot *tgbotapi.BotAPI, chatID int64, topicID int64, stats *RowCountStats) {
 	messageText := fmt.Sprintf("✅ Checker command completed!\n"+
 		"Rows processed/updated: %d",
 		stats.TotalWallets,
 	)
 
-	msg := tgbotapi.NewMessage(chatID, messageText)
-
-	_, err := bot.Send(msg)
-	if err != nil {
-		logger.Printf("Failed to send summary notification: %v", err)
-	}
+	sendTelegramMessage(bot, chatID, topicID, messageText)
 }
 
 // processWallet derives address, checks balances, and sends notification if needed
-func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, stats *RowCountStats, wallet *entity.WalletBalance) {
+func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, topicID int64, stats *RowCountStats, wallet *entity.WalletBalance) {
 	// 1. Derive address if it's not already set
 	if wallet.Address == "" {
 		address, err := deriveAddress(wallet.Mnemonic)
@@ -284,11 +303,9 @@ func processWallet(db *gorm.DB, bot *tgbotapi.BotAPI, chatID int64, stats *RowCo
 			// Prepare notification
 			debankURL := fmt.Sprintf("https://debank.com/profile/%s", wallet.Address)
 			messageText := fmt.Sprintf("💰 Found a wallet with a balance!\n\nChain: %s\nAddress: %s\n\nView on DeBank:\n%s", chain.Name, wallet.Address, debankURL)
-			msg := tgbotapi.NewMessage(chatID, messageText)
 
 			// Send Telegram notification
-			_, err := bot.Send(msg)
-			if err != nil {
+			if err := sendTelegramMessage(bot, chatID, topicID, messageText); err != nil {
 				logger.Printf("Failed to send Telegram notification for wallet %s: %v", wallet.Address, err)
 				// If sending fails, we don't update the DB and will retry on the next run.
 				return

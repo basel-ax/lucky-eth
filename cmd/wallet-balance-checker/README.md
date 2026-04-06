@@ -23,6 +23,7 @@ The application is configured using environment variables. You can create a `.en
     -   Example: `postgres://user:password@localhost:5432/database_name`
 -   `TELEGRAM_APP_BOT_TOKEN`: The token for your Telegram bot, obtained from BotFather.
 -   `TELEGRAM_CHAT_ID`: The unique identifier for the target chat where notifications will be sent.
+-   `TELEGRAM_TOPIC_ID`: (Optional) The ID of a specific topic in a forum/group. Leave empty to send messages to the general chat.
 -   `ETH_RPC_URL`: The HTTP RPC endpoint for an Ethereum mainnet node (e.g., from Infura, Alchemy, or your own node).
 -   `ARBITRUM_RPC_URL`: The HTTP RPC endpoint for an Arbitrum One node.
 -   `BASE_RPC_URL`: The HTTP RPC endpoint for a Base node.

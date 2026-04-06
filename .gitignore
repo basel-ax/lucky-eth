@@ -26,6 +26,13 @@ go.work.sum
 
 # env file
 .env
+.env.local
+
+# Built binaries
+wallet-balance-checker
+
+# Test env
+test.env
 
 # Editor/IDE
 # .idea/
