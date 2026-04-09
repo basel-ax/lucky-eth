@@ -31,6 +31,15 @@ go.work.sum
 # Built binaries
 wallet-balance-checker
 
+# Root command
+cmd/root/
+
+# Internal packages
+internal/
+
+# Root main.go
+main.go
+
 # Test env
 test.env
 

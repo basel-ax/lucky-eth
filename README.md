@@ -10,9 +10,14 @@ This is a part of the project. All results you can get by 3 projects.
 
 ## Features
 
--   Generate wallets from 12-word mnemonics.
--   Check wallet balances across multiple Ethereum and L2 blockchains.
--   Receive Telegram notifications for wallets with non-zero balances.
+-   Derives Ethereum addresses from 12-word mnemonics.
+-   Checks wallet balances on multiple blockchains:
+    -   Ethereum Mainnet
+    -   Arbitrum
+    -   Base
+    -   Binance Smart Chain (BSC)
+-   Sends a notification to a specified Telegram chat via a bot if a balance greater than zero is found on any of the supported networks.
+-   Updates the database to mark wallets as notified to prevent duplicate alerts.
 
 ## Configuration
 
@@ -27,39 +32,69 @@ Then, open `.env` and fill in the required values.
 ### Required Environment Variables
 
 -   `DATABASE_URL`: The connection string for your PostgreSQL database.
--   `TELEGRAM_APP_BOT_TOKEN`: The token for your Telegram bot.
--   `TELEGRAM_CHAT_ID`: The ID of the Telegram chat where notifications will be sent.
+    -   Example: `postgres://user:password@localhost:5432/database_name`
+-   `TELEGRAM_APP_BOT_TOKEN`: The token for your Telegram bot, obtained from BotFather.
+-   `TELEGRAM_CHAT_ID`: The unique identifier for the target chat where notifications will be sent.
 -   `TELEGRAM_TOPIC_ID`: (Optional) The ID of a specific topic in a forum/group. Leave empty to send messages to the general chat.
--   `ETH_RPC_URL`: The RPC endpoint for the Ethereum mainnet.
--   `ARBITRUM_RPC_URL`: The RPC endpoint for the Arbitrum network.
--   `BASE_RPC_URL`: The RPC endpoint for the Base network.
--   `BSC_RPC_URL`: The RPC endpoint for the Binance Smart Chain.
+-   `ETH_RPC_URL`: The HTTP RPC endpoint for an Ethereum mainnet node (e.g., from Infura, Alchemy, or your own node).
+-   `ARBITRUM_RPC_URL`: The HTTP RPC endpoint for an Arbitrum One node.
+-   `BASE_RPC_URL`: The HTTP RPC endpoint for a Base node.
+-   `BSC_RPC_URL`: The HTTP RPC endpoint for a Binance Smart Chain node.
 
-## Commands
+## Database
 
-This project includes the following commands, which can be found in the `cmd` directory.
+The application requires a PostgreSQL database with a `wallet_balances` table. The application will automatically attempt to migrate the database schema for the `entity.WalletBalance` struct upon startup, creating the table if it doesn't exist.
 
-### `wallet-balance-checker`
+The `WalletBalance` entity is expected to have at least a `mnemonic` column populated. The application will then derive the `address`, check the `balance`, and update the record accordingly.
 
-This command checks the balances of Ethereum wallets stored in the database.
+## How to Run
 
-#### How to Run
-
-1.  **Navigate to the project root directory.**
-2.  **Build the command:**
+1.  **Navigate to the project root directory:**
     ```sh
-    go build ./cmd/wallet-balance-checker
-    ```
-3.  **Run the command:**
-    ```sh
-    ./wallet-balance-checker
+    cd /path/to/lucky-eth
     ```
 
-For more details, see the `README.md` file in the `cmd/wallet-balance-checker` directory.
+2.  **Ensure all dependencies are downloaded:**
+    ```sh
+    go mod tidy
+    ```
+
+3.  **Run the application (recommended):**
+    ```sh
+    go run . --prod
+    ```
+
+Or build and run the binary:
+```sh
+go build -o wallet-balance-checker .
+./wallet-balance-checker --prod
+```
+
+## Command Line Flags
+
+The application supports the following command line flags:
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--prod` | boolean | Run in production mode. When set, console output is suppressed and a summary notification is sent to Telegram after completion. |
+
+### Examples
+
+**Development mode (default):**
+```sh
+go run .
+```
+This will show all log messages in the console.
+
+**Production mode:**
+```sh
+go run . --prod
+```
+This will run silently without console output and send a summary message to Telegram when complete.
 
 ## Cron Job Setup
 
-The `wallet-balance-checker` command can be scheduled to run automatically using cron.
+The wallet-balance-checker command can be scheduled to run automatically using cron.
 
 ### Crontab Entry
 
@@ -70,24 +105,24 @@ crontab -e
 
 Add the following entry to run the checker every 5 minutes in production mode:
 ```cron
-*/5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod >> /var/log/wallet-balance-checker.log 2>&1
+*/5 * * * * cd /path/to/lucky-eth && go run . --prod >> /var/log/wallet-balance-checker.log 2>&1
 ```
 
 Or to suppress all output:
 ```cron
-*/5 * * * * /path/to/lucky-eth/wallet-balance-checker --prod > /dev/null 2>&1
+*/5 * * * * cd /path/to/lucky-eth && go run . --prod > /dev/null 2>&1
 ```
 
 ### Run Every 35 Minutes
 
 To run the checker every 35 minutes instead:
 ```cron
-*/35 * * * * /path/to/lucky-eth/wallet-balance-checker --prod >> /var/log/wallet-balance-checker.log 2>&1
+*/35 * * * * cd /path/to/lucky-eth && go run . --prod >> /var/log/wallet-balance-checker.log 2>&1
 ```
 
 Or to suppress all output:
 ```cron
-*/35 * * * * /path/to/lucky-eth/wallet-balance-checker --prod > /dev/null 2>&1
+*/35 * * * * cd /path/to/lucky-eth && go run . --prod > /dev/null 2>&1
 ```
 
 ### How It Works
@@ -99,3 +134,20 @@ Or to suppress all output:
         -   Number of addresses derived
         -   Number of balances updated
         -   Number of notifications sent
+        -   Total rows processed
+
+### Log Rotation
+
+To prevent log files from growing too large, consider setting up log rotation. Add to `/etc/logrotate.d/wallet-balance-checker`:
+
+```
+/var/log/wallet-balance-checker.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
+```
