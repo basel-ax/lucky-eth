@@ -226,11 +226,7 @@ func sendTelegramMessage(bot *tgbotapi.BotAPI, chatID int64, topicID int64, text
 }
 
 func sendSummaryNotification(bot *tgbotapi.BotAPI, chatID int64, topicID int64, stats *RowCountStats) {
-	messageText := fmt.Sprintf("✅ Checker command completed!\n"+
-		"Rows processed/updated: %d",
-		stats.TotalWallets,
-	)
-
+	messageText := fmt.Sprintf("✅ lucky-eth: %d wallets processed", stats.TotalWallets)
 	sendTelegramMessage(bot, chatID, topicID, messageText)
 }
 
