@@ -193,8 +193,15 @@ func Run() {
 
 	stats := &RowCountStats{}
 
+	limit := 100
+	if limitStr := os.Getenv("WALLET_CHECK_LIMIT"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
 	var wallets []entity.WalletBalance
-	if err := db.Where("is_notified = ?", false).Find(&wallets).Error; err != nil {
+	if err := db.Where("is_notified = ?", false).Limit(limit).Find(&wallets).Error; err != nil {
 		logger.Fatalf("Failed to fetch wallets: %v", err)
 	}
 
