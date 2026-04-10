@@ -138,7 +138,10 @@ func Run() {
 	if err != nil {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}
-	db.AutoMigrate(&entity.WalletBalance{})
+	var wb entity.WalletBalance
+	if err := db.AutoMigrate(&wb).Error; err != nil {
+		logger.Fatalf("Failed to migrate database: %v", err)
+	}
 
 	botToken := os.Getenv("TELEGRAM_APP_BOT_TOKEN")
 	if botToken == "" {

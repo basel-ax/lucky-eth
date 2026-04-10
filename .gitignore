@@ -34,9 +34,6 @@ wallet-balance-checker
 # Root command
 cmd/root/
 
-# Internal packages
-internal/
-
 # Root main.go
 main.go
 
