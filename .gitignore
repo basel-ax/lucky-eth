@@ -31,6 +31,12 @@ go.work.sum
 # Built binaries
 wallet-balance-checker
 
+# Log files
+wallet-balance-checker.log
+
+# Lock files
+tmp/
+
 # Root command
 cmd/root/
 

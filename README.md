@@ -77,6 +77,7 @@ The application supports the following command line flags:
 | Flag | Type | Description |
 |------|------|-------------|
 | `--prod` | boolean | Run in production mode. When set, console output is suppressed and a summary notification is sent to Telegram after completion. |
+| `--limit` | int | Maximum number of wallets to check per run. Default is 500 (~10 wallets/second, ~50 wallets/minute per chain). Overrides `WALLET_CHECK_LIMIT` env var if set. |
 
 ### Examples
 
@@ -125,9 +126,21 @@ Or to suppress all output:
 */35 * * * * cd /path/to/lucky-eth && go run . --prod > /dev/null 2>&1
 ```
 
+### Custom Limit
+
+To set a custom wallet limit (e.g., 2250 wallets per run):
+```cron
+*/5 * * * * cd /path/to/lucky-eth && go run . --prod --limit=2250 >> /var/log/wallet-balance-checker.log 2>&1
+```
+
+Or to suppress all output:
+```cron
+*/5 * * * * cd /path/to/lucky-eth && go run . --prod --limit=2250 > /dev/null 2>&1
+```
+
 ### How It Works
 
--   **Lock Mechanism**: The application uses a lock file (`/tmp/wallet-balance-checker.lock`) to prevent concurrent execution. If the previous instance is still running, the new instance will exit silently in production mode.
+-   **Lock Mechanism**: The application uses a lock file (`./tmp/wallet-balance-checker.lock`) to prevent concurrent execution. If the previous instance is still running, the new instance will exit silently in production mode.
 -   **Production Mode**: When using `--prod` flag:
     -   No console output is shown
     -   A Telegram summary message is sent after completion with:

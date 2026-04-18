@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/basel-ax/lucky-eth/entity"
@@ -75,16 +76,65 @@ type RowCountStats struct {
 	Errors         int
 }
 
-const lockFilePath = "/tmp/wallet-balance-checker.lock"
+const lockFilePath = "./tmp/wallet-balance-checker.lock"
+
+func ensureTmpDir() error {
+	if err := os.MkdirAll("./tmp", 0755); err != nil {
+		return fmt.Errorf("failed to create tmp directory: %w", err)
+	}
+	return nil
+}
+
+func isProcessAlive(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	// On Unix, FindProcess always succeeds; on Windows, it may return an error
+	// Use Signal 0 to check if process actually exists
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
 
 func acquireLock() (*os.File, error) {
+	// Ensure tmp directory exists
+	if err := ensureTmpDir(); err != nil {
+		return nil, err
+	}
+
+	// Check if lock file exists
+	if _, err := os.Stat(lockFilePath); err == nil {
+		// Lock file exists - check if it's stale (process dead)
+		data, readErr := os.ReadFile(lockFilePath)
+		if readErr == nil && len(data) > 0 {
+			var storedPID int
+			if _, err := fmt.Sscanf(string(data), "%d", &storedPID); err == nil {
+				if !isProcessAlive(storedPID) {
+					// Process dead, remove stale lock
+					os.Remove(lockFilePath)
+				} else {
+					return nil, fmt.Errorf("another instance is already running")
+				}
+			}
+		}
+		// If we can't read PID, assume stale and remove
+		os.Remove(lockFilePath)
+	}
+
+	// Create lock file
 	lockFile, err := os.OpenFile(lockFilePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 	if err != nil {
-		if os.IsExist(err) {
-			return nil, fmt.Errorf("another instance is already running")
-		}
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
+
+	// Write current PID to lock file
+	pid := os.Getpid()
+	if _, err := lockFile.WriteString(fmt.Sprintf("%d", pid)); err != nil {
+		lockFile.Close()
+		os.Remove(lockFilePath)
+		return nil, fmt.Errorf("failed to write PID to lock file: %w", err)
+	}
+
 	return lockFile, nil
 }
 
@@ -97,6 +147,7 @@ func releaseLock(lockFile *os.File) {
 
 func Run() {
 	prodMode := flag.Bool("prod", false, "Run in production mode (silent console output, send telegram summary)")
+	limitPtr := flag.Int("limit", 0, "Maximum number of wallets to check (overrides WALLET_CHECK_LIMIT env var)")
 	flag.Parse()
 
 	logger = Logger{logger: log.New(os.Stdout, "", log.LstdFlags), silent: *prodMode}
@@ -193,8 +244,10 @@ func Run() {
 
 	stats := &RowCountStats{}
 
-	limit := 100
-	if limitStr := os.Getenv("WALLET_CHECK_LIMIT"); limitStr != "" {
+	limit := 500
+	if *limitPtr > 0 {
+		limit = *limitPtr
+	} else if limitStr := os.Getenv("WALLET_CHECK_LIMIT"); limitStr != "" {
 		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
 			limit = parsed
 		}
